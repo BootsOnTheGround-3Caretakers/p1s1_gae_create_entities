@@ -15,6 +15,7 @@ from task_queue_functions import TaskQueueFunctions
 from p1_services import Services, TaskArguments
 from p1_global_settings import PostDataRules
 from p1_datastores import Datastores
+from datastore_functions import DatastoreFunctions as DSF
 
 
 class CommonPostHandler(DataValidation):
@@ -227,6 +228,25 @@ class CreateUser(webapp2.RequestHandler, CommonPostHandler):
                 'task_results': task_results,
             }
         # </end> verify input data
+
+        # make sure no existing user uses the same phone
+        if phone_number:
+            query = Datastores.users.query(Datastores.users.phone_1 == phone_number)
+            call_result = DSF.kfetch(query)
+            if call_result['success'] != RC.success:
+                return_msg += "fetch of users failed"
+                return {
+                    'success': call_result['success'], 'return_msg': return_msg, 'debug_data': debug_data,
+                    'task_results': task_results
+                }
+            users = call_result['fetch_result']
+            if users:
+                return_msg += "Phone number already registered on an existing user."
+                return {
+                    'success': RC.input_validation_failed, 'return_msg': return_msg, 'debug_data': debug_data,
+                    'task_results': task_results
+                }
+        # </end> make sure no existing user uses the same phone
 
         user = Datastores.users()
         user.email_address = email_address
