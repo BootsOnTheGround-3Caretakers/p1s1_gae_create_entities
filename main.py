@@ -6,6 +6,7 @@ import sys
 from datetime import datetime
 
 import webapp2
+from google.appengine.ext import ndb
 
 cwd = os.getcwd()
 sys.path.insert(0, 'includes')
@@ -175,9 +176,37 @@ class CreateNeeder(webapp2.RequestHandler, CommonPostHandler):
                 'success': RC.input_validation_failed, 'return_msg': return_msg, 'debug_data': debug_data,
                 'task_results': task_results,
             }
+
+        try:
+            existings_keys = [
+                ndb.Key(Datastores.users._get_kind(), long(user_uid)),
+            ]
+        except Exception as exc:
+            return_msg += str(exc)
+            return {
+                'success': RC.input_validation_failed, 'return_msg': return_msg, 'debug_data': debug_data,
+                'task_results': task_results,
+            }
+
+        for existing_key in existings_keys:
+            call_result = DSF.kget(existing_key)
+            debug_data.append(call_result)
+            if call_result['success'] != RC.success:
+                return_msg += "Datastore access failed"
+                return {
+                    'success': RC.datastore_failure, 'return_msg': return_msg, 'debug_data': debug_data,
+                    'task_results': task_results,
+                }
+            if not call_result['get_result']:
+                return_msg += "{} not found".format(existing_key.kind())
+                return {
+                    'success': RC.input_validation_failed, 'return_msg': return_msg, 'debug_data': debug_data,
+                    'task_results': task_results,
+                }
         # </end> verify input data
 
-        needer = Datastores.needer()
+        parent_key = ndb.Key(Datastores.users._get_kind(), long(user_uid))
+        needer = Datastores.needer(parent=parent_key)
         needer.user_uid = user_uid
         call_result = needer.kput()
         debug_data.append(call_result)
