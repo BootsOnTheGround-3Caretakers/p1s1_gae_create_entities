@@ -1,5 +1,6 @@
 #!/bin/bash
 
+./build.sh
 PROJECT=aqueous-choir-160420
 gcloud -q --project=$PROJECT tasks queues create p1s1t1-create-need
 gcloud -q --project=$PROJECT tasks queues create p1s1t2-create-hashtag
