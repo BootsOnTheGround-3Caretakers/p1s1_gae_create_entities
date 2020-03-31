@@ -323,6 +323,34 @@ class CreateCluster(webapp2.RequestHandler, CommonPostHandler):
                 'success': RC.input_validation_failed, 'return_msg': return_msg, 'debug_data': debug_data,
                 'task_results': task_results,
             }
+
+        try:
+            existings_keys = [
+                ndb.Key(Datastores.users._get_kind(), long(user_uid)),
+                ndb.Key(Datastores.users._get_kind(), long(user_uid), Datastores.needer.get_kind(), long(needer_uid)),
+            ]
+        except Exception as exc:
+            return_msg += str(exc)
+            return {
+                'success': RC.input_validation_failed, 'return_msg': return_msg, 'debug_data': debug_data,
+                'task_results': task_results,
+            }
+
+        for existing_key in existings_keys:
+            call_result = DSF.kget(existing_key)
+            debug_data.append(call_result)
+            if call_result['success'] != RC.success:
+                return_msg += "Datastore access failed"
+                return {
+                    'success': RC.datastore_failure, 'return_msg': return_msg, 'debug_data': debug_data,
+                    'task_results': task_results,
+                }
+            if not call_result['get_result']:
+                return_msg += "{} not found".format(existing_key.kind())
+                return {
+                    'success': RC.input_validation_failed, 'return_msg': return_msg, 'debug_data': debug_data,
+                    'task_results': task_results,
+                }
         # </end> verify input data
 
         cluster = Datastores.cluster()
@@ -338,7 +366,20 @@ class CreateCluster(webapp2.RequestHandler, CommonPostHandler):
                 'task_results': task_results
             }
 
-        task_results['uid'] = call_result['put_result'].id()
+        cluster_uid = call_result['put_result'].id()
+        task_results['uid'] = cluster_uid
+
+        parent_key = ndb.Key(Datastores.users._get_kind(), long(user_uid))
+        cluster_pointer = Datastores.cluster_pointer(parent=parent_key)
+        cluster_pointer.cluster_uid = cluster_uid
+        call_result = cluster_pointer.kput()
+        debug_data.append(call_result)
+        if call_result['success'] != RC.success:
+            return_msg += "failed to write cluster_pointer to datastore"
+            return {
+                'success': call_result['success'], 'return_msg': return_msg, 'debug_data': debug_data,
+                'task_results': task_results
+            }
 
         return {'success': RC.success, 'return_msg': return_msg, 'debug_data': debug_data, 'task_results': task_results}
 
