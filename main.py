@@ -237,6 +237,13 @@ class CreateUser(webapp2.RequestHandler, CommonPostHandler):
         first_name = unicode(self.request.get(TaskArguments.s1t4_first_name, ""))
         last_name = unicode(self.request.get(TaskArguments.s1t4_last_name, ""))
         phone_number = unicode(self.request.get(TaskArguments.s1t4_phone_number, "")) or None
+        country_uid = unicode(self.request.get(TaskArguments.s1t4_country_uid, "")) or None
+        region_uid = unicode(self.request.get(TaskArguments.s1t4_region_uid, "")) or None
+        area_uid = unicode(self.request.get(TaskArguments.s1t4_area_uid, "")) or None
+        description = unicode(self.request.get(TaskArguments.s1t4_description, "")) or None
+        preferred_radius = unicode(self.request.get(TaskArguments.s1t4_preferred_radius, "")) or None
+        account_flags = unicode(self.request.get(TaskArguments.s1t4_account_flags, "")) or None
+        location_coords = unicode(self.request.get(TaskArguments.s1t4_location_coords, "")) or None
 
         call_result = self.ruleCheck([
             [transaction_id, PostDataRules.required_name],
@@ -246,6 +253,13 @@ class CreateUser(webapp2.RequestHandler, CommonPostHandler):
             [first_name, Datastores.users._rule_first_name],
             [last_name, Datastores.users._rule_last_name],
             [phone_number, Datastores.users._rule_phone_1],
+            [country_uid, Datastores.users._rule_country_uid],
+            [region_uid, Datastores.users._rule_region_uid],
+            [area_uid, Datastores.users._rule_area_uid],
+            [description, Datastores.users._rule_description],
+            [preferred_radius, Datastores.users._rule_preferred_radius],
+            [account_flags, Datastores.users._rule_account_flags],
+            [location_coords, Datastores.users._rule_location_cords],
         ])
         debug_data.append(call_result)
         if call_result['success'] != RC.success:
@@ -254,6 +268,56 @@ class CreateUser(webapp2.RequestHandler, CommonPostHandler):
                 'success': RC.input_validation_failed, 'return_msg': return_msg, 'debug_data': debug_data,
                 'task_results': task_results,
             }
+
+        existing_keys = []
+        if country_uid:
+            existing_keys.append(ndb.Key(Datastores.country_codes._get_kind(), country_uid))
+
+            if region_uid:
+                existing_keys.append(ndb.Key(
+                    Datastores.country_codes._get_kind(), country_uid,
+                    Datastores.region_codes._get_kind(), region_uid,
+                ))
+
+                if area_uid:
+                    existing_keys.append(ndb.Key(
+                        Datastores.country_codes._get_kind(), country_uid,
+                        Datastores.region_codes._get_kind(), region_uid,
+                        Datastores.area_codes._get_kind(), area_uid,
+                    ))
+
+        for existing_key in existing_keys:
+            call_result = DSF.kget(existing_key)
+            debug_data.append(call_result)
+            if call_result['success'] != RC.success:
+                return_msg += "Datastore access failed"
+                return {
+                    'success': RC.datastore_failure, 'return_msg': return_msg, 'debug_data': debug_data,
+                    'task_results': task_results,
+                }
+            if not call_result['get_result']:
+                return_msg += "{} not found".format(existing_key.kind())
+                return {
+                    'success': RC.input_validation_failed, 'return_msg': return_msg, 'debug_data': debug_data,
+                    'task_results': task_results,
+                }
+
+        if location_coords:
+            try:
+                latitude, longitude = [float(val.strip()) for val in location_coords.split(",", 1)]
+            except Exception as exc:
+                return_msg += str(exc)
+                return {
+                    'success': RC.input_validation_failed, 'return_msg': return_msg, 'debug_data': debug_data,
+                    'task_results': task_results,
+                }
+
+            if not ((-90 <= latitude <= 90) and (-180 <= longitude <= 180)):
+                return_msg += "latitude value must be [-90, 90], longitude value must be [-180, 180]"
+                return {
+                    'success': RC.input_validation_failed, 'return_msg': return_msg, 'debug_data': debug_data,
+                    'task_results': task_results,
+                }
         # </end> verify input data
 
         # make sure no existing user uses the same phone
@@ -281,6 +345,14 @@ class CreateUser(webapp2.RequestHandler, CommonPostHandler):
         user.first_name = first_name
         user.last_name = last_name
         user.phone_1 = phone_number
+        user.country_uid = country_uid
+        user.region_uid = country_uid and region_uid
+        user.area_uid = country_uid and region_uid and area_uid
+        user.description = description
+        user.preferred_radius = preferred_radius
+        user.account_flags = account_flags
+        if location_coords:
+            user.location_cords = ndb.GeoPt(latitude, longitude)
         call_result = user.kput()
         debug_data.append(call_result)
         if call_result['success'] != RC.success:
