@@ -167,7 +167,7 @@ class CreateNeeder(webapp2.RequestHandler, CommonPostHandler):
         call_result = self.ruleCheck([
             [transaction_id, PostDataRules.required_name],
             [transaction_user_uid, PostDataRules.internal_uid],
-            [user_uid, PostDataRules.required_name],
+            [user_uid, PostDataRules.internal_uid],
         ])
         debug_data.append(call_result)
         if call_result['success'] != RC.success:
@@ -177,9 +177,10 @@ class CreateNeeder(webapp2.RequestHandler, CommonPostHandler):
                 'task_results': task_results,
             }
 
+        user_uid = long(user_uid)
         try:
             existings_keys = [
-                ndb.Key(Datastores.users._get_kind(), long(user_uid)),
+                ndb.Key(Datastores.users._get_kind(), user_uid),
             ]
         except Exception as exc:
             return_msg += str(exc)
@@ -205,7 +206,7 @@ class CreateNeeder(webapp2.RequestHandler, CommonPostHandler):
                 }
         # </end> verify input data
 
-        parent_key = ndb.Key(Datastores.users._get_kind(), long(user_uid))
+        parent_key = ndb.Key(Datastores.users._get_kind(), user_uid)
         needer = Datastores.needer(parent=parent_key)
         needer.user_uid = user_uid
         call_result = needer.kput()
@@ -384,9 +385,9 @@ class CreateCluster(webapp2.RequestHandler, CommonPostHandler):
         call_result = self.ruleCheck([
             [transaction_id, PostDataRules.required_name],
             [transaction_user_uid, PostDataRules.internal_uid],
-            [user_uid, Datastores.cluster._rule_user_uid],
+            [user_uid, PostDataRules.internal_uid],
             [expiration_date, PostDataRules.positive_number],
-            [needer_uid, Datastores.cluster._rule_needer_uid],
+            [needer_uid, PostDataRules.internal_uid],
         ])
         debug_data.append(call_result)
         if call_result['success'] != RC.success:
@@ -396,10 +397,12 @@ class CreateCluster(webapp2.RequestHandler, CommonPostHandler):
                 'task_results': task_results,
             }
 
+        user_uid = long(user_uid)
+        needer_uid = long(needer_uid)
         try:
             existings_keys = [
-                ndb.Key(Datastores.users._get_kind(), long(user_uid)),
-                ndb.Key(Datastores.users._get_kind(), long(user_uid), Datastores.needer._get_kind(), long(needer_uid)),
+                ndb.Key(Datastores.users._get_kind(), user_uid),
+                ndb.Key(Datastores.users._get_kind(), user_uid, Datastores.needer._get_kind(), needer_uid),
             ]
         except Exception as exc:
             return_msg += str(exc)
@@ -441,7 +444,7 @@ class CreateCluster(webapp2.RequestHandler, CommonPostHandler):
         cluster_uid = call_result['put_result'].id()
         task_results['uid'] = cluster_uid
 
-        user_key = ndb.Key(Datastores.users._get_kind(), long(user_uid))
+        user_key = ndb.Key(Datastores.users._get_kind(), user_uid)
         cluster_pointer = Datastores.cluster_pointer(parent=user_key)
         cluster_pointer.cluster_uid = cluster_uid
         call_result = cluster_pointer.kput()
@@ -456,7 +459,7 @@ class CreateCluster(webapp2.RequestHandler, CommonPostHandler):
         cluster_key = ndb.Key(Datastores.cluster._get_kind(), cluster_uid)
         cluster_joins = Datastores.cluster_joins(id="{}|{}".format(user_uid, cluster_uid), parent=cluster_key)
         cluster_joins.user_uid = user_uid
-        cluster_joins.cluster_uid = unicode(cluster_uid)
+        cluster_joins.cluster_uid = cluster_uid
         cluster_joins.roles = "needer"
         cluster_joins.kput()
         debug_data.append(call_result)
