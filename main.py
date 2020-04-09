@@ -411,6 +411,7 @@ class CreateCluster(webapp2.RequestHandler, CommonPostHandler):
                 'task_results': task_results,
             }
 
+        existing_entities = []
         for existing_key in existings_keys:
             call_result = DSF.kget(existing_key)
             debug_data.append(call_result)
@@ -420,12 +421,23 @@ class CreateCluster(webapp2.RequestHandler, CommonPostHandler):
                     'success': RC.datastore_failure, 'return_msg': return_msg, 'debug_data': debug_data,
                     'task_results': task_results,
                 }
-            if not call_result['get_result']:
+
+            entity = call_result['get_result']
+            if not entity:
                 return_msg += "{} not found".format(existing_key.kind())
                 return {
                     'success': RC.input_validation_failed, 'return_msg': return_msg, 'debug_data': debug_data,
                     'task_results': task_results,
                 }
+            existing_entities.append(entity)
+
+        user = existing_entities[0]
+        if not (user.country_uid and user.region_uid and user.area_uid):
+            return_msg += "Cluster user must have country_uid, region_uid, and area_uid specified."
+            return {
+                'success': RC.input_validation_failed, 'return_msg': return_msg, 'debug_data': debug_data,
+                'task_results': task_results,
+            }
         # </end> verify input data
 
         cluster = Datastores.cluster()
