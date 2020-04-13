@@ -260,7 +260,7 @@ class CreateUser(webapp2.RequestHandler, CommonPostHandler):
             [description, Datastores.users._rule_description],
             [preferred_radius, Datastores.users._rule_preferred_radius],
             [account_flags, Datastores.users._rule_account_flags],
-            [location_coords, Datastores.users._rule_location_cords],
+            [location_coords, PostDataRules.optional_name],
         ])
         debug_data.append(call_result)
         if call_result['success'] != RC.success:
@@ -323,16 +323,17 @@ class CreateUser(webapp2.RequestHandler, CommonPostHandler):
 
         # make sure no existing user uses the same phone
         if phone_number:
-            query = Datastores.users.query(Datastores.users.phone_1 == phone_number)
-            call_result = DSF.kfetch(query)
+            key = ndb.key(Datastores.phone_numbers._get_kind(), "{}|{}".format(country_uid, phone_number))
+            call_result = DSF.kget(key)
+            debug_data.append(call_result)
             if call_result['success'] != RC.success:
-                return_msg += "fetch of users failed"
+                return_msg += "Failed to load phone_numbers from datastore"
                 return {
                     'success': call_result['success'], 'return_msg': return_msg, 'debug_data': debug_data,
                     'task_results': task_results
                 }
-            users = call_result['fetch_result']
-            if users:
+            phone_number_entity = call_result['get_result']
+            if phone_number_entity:
                 return_msg += "Phone number already registered on an existing user."
                 return {
                     'success': RC.input_validation_failed, 'return_msg': return_msg, 'debug_data': debug_data,
@@ -363,7 +364,20 @@ class CreateUser(webapp2.RequestHandler, CommonPostHandler):
                 'task_results': task_results
             }
 
-        task_results['uid'] = call_result['put_result'].id()
+        user_uid = call_result['put_result'].id()
+        task_results['uid'] = user_uid
+
+        if phone_number:
+            phone_number_entity = Datastores.phone_numbers(id="{}|{}".format(country_uid, phone_number))
+            phone_number_entity.user_uid = user_uid
+            call_result = phone_number_entity.kput()
+            debug_data.append(call_result)
+            if call_result['success'] != RC.success:
+                return_msg += "failed to write phone_number to datastore"
+                return {
+                    'success': call_result['success'], 'return_msg': return_msg, 'debug_data': debug_data,
+                    'task_results': task_results
+                }
 
         return {'success': RC.success, 'return_msg': return_msg, 'debug_data': debug_data, 'task_results': task_results}
 
