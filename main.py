@@ -323,7 +323,7 @@ class CreateUser(webapp2.RequestHandler, CommonPostHandler):
 
         # make sure no existing user uses the same phone
         if phone_number:
-            key = ndb.key(Datastores.phone_numbers._get_kind(), "{}|{}".format(country_uid, phone_number))
+            key = ndb.Key(Datastores.phone_numbers._get_kind(), "{}|{}".format(country_uid, phone_number))
             call_result = DSF.kget(key)
             debug_data.append(call_result)
             if call_result['success'] != RC.success:
