@@ -163,11 +163,17 @@ class CreateNeeder(webapp2.RequestHandler, CommonPostHandler):
         transaction_id = unicode(self.request.get("transaction_id", ""))
         transaction_user_uid = unicode(self.request.get("transaction_user_uid", ""))
         user_uid = unicode(self.request.get(TaskArguments.s1t3_user_uid, ""))
+        needer_uid = unicode(self.request.get(TaskArguments.s1t3_needer_uid, "")) or None
+        private_metadata = unicode(self.request.get(TaskArguments.s1t3_private_metadata, "")) or None
+        public_metadata = unicode(self.request.get(TaskArguments.s1t3_public_metadata, "")) or None
 
         call_result = self.ruleCheck([
             [transaction_id, PostDataRules.required_name],
             [transaction_user_uid, PostDataRules.internal_uid],
             [user_uid, PostDataRules.internal_uid],
+            [needer_uid, PostDataRules.optional_uid],
+            [private_metadata, Datastores.needer._rule_private_metadata_blob],
+            [public_metadata, Datastores.needer._rule_public_metadata_blob],
         ])
         debug_data.append(call_result)
         if call_result['success'] != RC.success:
@@ -178,17 +184,16 @@ class CreateNeeder(webapp2.RequestHandler, CommonPostHandler):
             }
 
         user_uid = long(user_uid)
-        try:
-            existings_keys = [
-                ndb.Key(Datastores.users._get_kind(), user_uid),
-            ]
-        except Exception as exc:
-            return_msg += str(exc)
-            return {
-                'success': RC.input_validation_failed, 'return_msg': return_msg, 'debug_data': debug_data,
-                'task_results': task_results,
-            }
+        existings_keys = [
+            ndb.Key(Datastores.users._get_kind(), user_uid),
+        ]
+        if needer_uid:
+            needer_uid = long(needer_uid)
+            existings_keys.append(
+                ndb.Key(Datastores.users._get_kind(), user_uid, Datastores.needer._get_kind(), needer_uid)
+            )
 
+        existing_entities = []
         for existing_key in existings_keys:
             call_result = DSF.kget(existing_key)
             debug_data.append(call_result)
@@ -198,17 +203,26 @@ class CreateNeeder(webapp2.RequestHandler, CommonPostHandler):
                     'success': RC.datastore_failure, 'return_msg': return_msg, 'debug_data': debug_data,
                     'task_results': task_results,
                 }
-            if not call_result['get_result']:
+            entity = call_result['get_result']
+            if not entity:
                 return_msg += "{} not found".format(existing_key.kind())
                 return {
                     'success': RC.input_validation_failed, 'return_msg': return_msg, 'debug_data': debug_data,
                     'task_results': task_results,
                 }
+            existing_entities.append(entity)
+
         # </end> verify input data
 
-        parent_key = ndb.Key(Datastores.users._get_kind(), user_uid)
-        needer = Datastores.needer(parent=parent_key)
+        user_key = existing_entities[0]
+        if needer_uid:
+            needer = existing_entities[1]
+        else:
+            needer = Datastores.needer(parent=user_key)
+
         needer.user_uid = user_uid
+        needer.private_metadata_blob = private_metadata
+        needer.public_metadata_blob = public_metadata
         call_result = needer.kput()
         debug_data.append(call_result)
         if call_result['success'] != RC.success:
